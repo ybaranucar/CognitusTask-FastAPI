@@ -1,19 +1,14 @@
 from fastapi import FastAPI, Request
-from numpy.lib.function_base import i0
-from algorithm import *
+from algorithm import load_model
+from celery_app.celery_tasks import train_task
+
 
 app = FastAPI()
 
 
-
 @app.get("/train")
-async def train():
-    text, label = create_data()
-    training, vectorizer = tfidf(text)
-    x_train, x_test, y_train, y_test = cross_validation.train_test_split(training, label, test_size = 0.25, random_state = 0)
-    model, accuracy, precision, recall = test_SVM(x_train, x_test, y_train, y_test)
-    dump_model(model, 'model.pickle')
-    dump_model(vectorizer, 'vectorizer.pickle')
+def train():
+    train_task.delay()
     return "Train islemi basarili"
 
 
