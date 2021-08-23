@@ -1,0 +1,111 @@
+version: '3.5'
+
+services:
+  db:
+    image: postgres
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: corporate_test_snapshot
+      PGDATA: /data/postgres
+    # networks:
+    #   - compose-files_default
+    volumes:
+       - postgres-data:/data/postgres
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+  pgadmin:
+    container_name: pgadmin_container
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    # networks:
+    #   - compose-files_default
+    volumes:
+        - pgadmin:/root/.pgadmin
+    ports:
+      - "5050:80"
+    restart: unless-stopped
+  
+  minio:
+    image: minio/minio
+    # networks:
+    #   - compose-files_default
+    volumes:
+      - minio-data:/data
+    ports:
+      - "9000:9000"
+    environment:
+      MINIO_ACCESS_KEY: minio
+      MINIO_SECRET_KEY: minio123
+    command: server /data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+  
+  rabbitmq:
+    container_name: rabbitmq_container
+    image: rabbitmq:3
+    volumes:
+      - /var/lib/rabbitmq
+    # ports:
+    #   - "5672:5672"
+    restart: unless-stopped
+
+  django:
+    image: cognitus_task_django
+    # networks: 
+    #   - compose-files_default
+    environment: 
+      DATABASE_URL: postgres://user:password@db:5432/postgres 
+      REQUEST_URL: http://fastapi:80
+    depends_on: 
+      - db
+    ports: 
+      - "8000:8000"
+    restart: unless-stopped
+
+  fastapi:
+    image: cognitus_task_fastapi
+    # networks: 
+    #   - compose-files_default
+    environment: 
+      DATABASE_URL: postgres://user:password@db:5432/postgres
+      BROKER_URL: amqp://guest:guest@rabbitmq:5672//
+    depends_on: 
+     - db
+    volumes:
+      - app:/app
+    ports: 
+     - "5001:80"
+    restart: unless-stopped
+
+  celery:
+    image: cognitus_task_fastapi
+    build:
+      context: .
+    entrypoint: celery -A celery_app.celery_worker.celery worker --loglevel=info
+    volumes:
+      - app:/app
+    environment: 
+      DATABASE_URL: postgres://user:password@db:5432/postgres
+      BROKER_URL: amqp://guest:guest@rabbitmq:5672//
+    depends_on:
+      - db
+      - rabbitmq
+    restart: unless-stopped
+
+
+volumes:
+    postgres-data:
+    pgadmin:
+    minio-data:
+    app:
+
+# networks:
+#     compose-files_default:
